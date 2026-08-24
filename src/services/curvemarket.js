@@ -24,7 +24,7 @@
 const config = require('./../config');
 const { fetchJson } = require('./fetchJson');
 const { cached } = require('./cache');
-const { parsePairs } = require('./marketdata');
+const { getQuotePrice } = require('./quoteprice');
 
 const EMPTY = { priceUsd: null };
 
@@ -59,16 +59,12 @@ async function fetchCurveMarket() {
   if (!config.tokenAddress || !config.rewardTokenAddress) return EMPTY;
 
   const chartUrl = `${config.ponsApi}/api/pons-v2-market/${config.tokenAddress}/chart?range=1d`;
-  const quoteUrl = `https://api.dexscreener.com/latest/dex/tokens/${config.rewardTokenAddress}`;
   const [chart, quote] = await Promise.all([
     fetchJson(chartUrl, { headers: { accept: 'application/json' } }),
-    fetchJson(quoteUrl, { headers: { accept: 'application/json' } }),
+    getQuotePrice(), // shared cached SPCX/USD read (see quoteprice.js)
   ]);
 
-  return combinePrices(
-    parseCurvePrice(chart),
-    parsePairs(quote, config.rewardTokenAddress, config.dexscreenerChainId).priceUsd
-  );
+  return combinePrices(parseCurvePrice(chart), quote.priceUsd);
 }
 
 // Cached read. On failure the last good value keeps being served (see cache.js).

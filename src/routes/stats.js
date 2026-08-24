@@ -16,8 +16,15 @@ const { getMarketData } = require('../services/marketdata');
 const { getTokenInfo } = require('../services/holders');
 const { getRewards } = require('../services/rewards');
 const { getCurveMarket } = require('../services/curvemarket');
+const { getQuotePrice } = require('../services/quoteprice');
 
 const router = express.Router();
+
+/** Pure: USD value of the SPCX paid to holders, or null if either leg is missing. */
+function rewardedUsd(rewards, quote) {
+  if (typeof rewards.totalRewarded !== 'number' || typeof quote.priceUsd !== 'number') return null;
+  return rewards.totalRewarded * quote.priceUsd;
+}
 
 /**
  * Pure: market cap computed from the bonding-curve price and the explorer's
@@ -31,18 +38,19 @@ function curveMarketCap(curve, token) {
 }
 
 /**
- * Pure: merge the four upstreams into the response body.
+ * Pure: merge the five upstreams into the response body.
  *
  * Market cap prefers DexScreener (live pool pricing, exists only after the
  * token graduates), then Blockscout's circulating_market_cap (populated only
  * once the explorer has an exchange rate), then the bonding-curve computation
  * — so the tile shows a real number at every stage of the token's life.
  */
-function buildStats({ market, token, rewards = {}, curve = {}, symbol, tokenAddress }) {
+function buildStats({ market, token, rewards = {}, curve = {}, quote = {}, symbol, tokenAddress }) {
   return {
     marketCap: market.marketCap ?? token.circulatingMarketCap ?? curveMarketCap(curve, token),
     holders: token.holders ?? null,
     totalRewarded: rewards.totalRewarded ?? null,
+    totalRewardedUsd: rewardedUsd(rewards, quote),
     priceUsd: market.priceUsd ?? curve.priceUsd ?? null,
     liquidityUsd: market.liquidityUsd ?? null,
     symbol,
@@ -55,17 +63,19 @@ router.get('/stats', async (req, res, next) => {
   try {
     // Independent upstreams — one being down must not delay or fail the other,
     // so all settle and a rejection degrades to nulls for its own fields only.
-    const [marketResult, tokenResult, rewardsResult, curveResult] = await Promise.allSettled([
+    const [marketResult, tokenResult, rewardsResult, curveResult, quoteResult] = await Promise.allSettled([
       getMarketData(),
       getTokenInfo(),
       getRewards(),
       getCurveMarket(),
+      getQuotePrice(),
     ]);
 
     const market = marketResult.status === 'fulfilled' ? marketResult.value : {};
     const token = tokenResult.status === 'fulfilled' ? tokenResult.value : {};
     const rewards = rewardsResult.status === 'fulfilled' ? rewardsResult.value : {};
     const curve = curveResult.status === 'fulfilled' ? curveResult.value : {};
+    const quote = quoteResult.status === 'fulfilled' ? quoteResult.value : {};
 
     if (marketResult.status === 'rejected') {
       console.warn('[spacecat] market data unavailable:', marketResult.reason?.message);
@@ -79,6 +89,9 @@ router.get('/stats', async (req, res, next) => {
     if (curveResult.status === 'rejected') {
       console.warn('[spacecat] curve price unavailable:', curveResult.reason?.message);
     }
+    if (quoteResult.status === 'rejected') {
+      console.warn('[spacecat] SPCX price unavailable:', quoteResult.reason?.message);
+    }
 
     res.json(
       buildStats({
@@ -86,6 +99,7 @@ router.get('/stats', async (req, res, next) => {
         token,
         rewards,
         curve,
+        quote,
         symbol: config.tokenSymbol,
         tokenAddress: config.tokenAddress,
       })

@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { buildStats } = require('./stats');
 
-const build = (market, token, rewards = {}, curve = {}) =>
-  buildStats({ market, token, rewards, curve, symbol: 'SPC', tokenAddress: '0xabc' });
+const build = (market, token, rewards = {}, curve = {}, quote = {}) =>
+  buildStats({ market, token, rewards, curve, quote, symbol: 'SPC', tokenAddress: '0xabc' });
 
 // Blockscout-shaped supply: 1B tokens at 18 decimals.
 const SUPPLY = { totalSupply: '1000000000000000000000000000', decimals: 18 };
@@ -64,6 +64,17 @@ test('pre-graduation: market cap is computed from curve price × explorer supply
 test('curve market cap loses to DexScreener and the explorer figure', () => {
   assert.strictEqual(build({ marketCap: 5 }, SUPPLY, {}, { priceUsd: 1 }).marketCap, 5);
   assert.strictEqual(build({}, { ...SUPPLY, circulatingMarketCap: 7 }, {}, { priceUsd: 1 }).marketCap, 7);
+});
+
+test('totalRewardedUsd is the SPCX amount at the SPCX/USD price', () => {
+  const out = build({}, {}, { totalRewarded: 11 }, {}, { priceUsd: 135.4 });
+  assert.strictEqual(out.totalRewardedUsd, 11 * 135.4);
+});
+
+test('totalRewardedUsd needs both legs, and a real zero stays 0', () => {
+  assert.strictEqual(build({}, {}, { totalRewarded: 11 }).totalRewardedUsd, null);
+  assert.strictEqual(build({}, {}, {}, {}, { priceUsd: 135.4 }).totalRewardedUsd, null);
+  assert.strictEqual(build({}, {}, { totalRewarded: 0 }, {}, { priceUsd: 135.4 }).totalRewardedUsd, 0);
 });
 
 test('curve market cap needs both a price and the supply — else null', () => {

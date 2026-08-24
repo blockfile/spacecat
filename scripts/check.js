@@ -10,6 +10,7 @@ const { getMarketData } = require('../src/services/marketdata');
 const { getTokenInfo } = require('../src/services/holders');
 const { getRewards } = require('../src/services/rewards');
 const { getCurveMarket } = require('../src/services/curvemarket');
+const { getQuotePrice } = require('../src/services/quoteprice');
 const { buildStats } = require('../src/routes/stats');
 
 const show = (v) => (v === null || v === undefined ? '—' : v);
@@ -30,11 +31,12 @@ async function main() {
     return;
   }
 
-  const [market, token, rewards, curve] = await Promise.allSettled([
+  const [market, token, rewards, curve, quote] = await Promise.allSettled([
     getMarketData(),
     getTokenInfo(),
     getRewards(),
     getCurveMarket(),
+    getQuotePrice(),
   ]);
 
   console.log('dexscreener (market cap)');
@@ -53,6 +55,11 @@ async function main() {
     console.log(`  holders    : ${show(token.value.holders)}`);
     console.log(`  circMcap   : ${show(token.value.circulatingMarketCap)} (market cap fallback)`);
   }
+  console.log('');
+
+  console.log('dexscreener (SPCX/USD)');
+  if (quote.status === 'rejected') console.log(`  FAILED: ${quote.reason.message}`);
+  else console.log(`  priceUsd   : ${quote.value.priceUsd}`);
   console.log('');
 
   console.log('pons curve (pre-graduation price, via SPCX/USD)');
@@ -78,6 +85,7 @@ async function main() {
         token: token.status === 'fulfilled' ? token.value : {},
         rewards: rewards.status === 'fulfilled' ? rewards.value : {},
         curve: curve.status === 'fulfilled' ? curve.value : {},
+        quote: quote.status === 'fulfilled' ? quote.value : {},
         symbol: config.tokenSymbol,
         tokenAddress: config.tokenAddress,
       }),
