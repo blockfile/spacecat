@@ -3,7 +3,7 @@
 // The site's only live data. GET /stats returns the fields the spacecat.meme
 // telemetry panel reads:
 //
-//   { "marketCap": 4189702, "holders": 12879 }
+//   { "marketCap": 4189702, "holders": 12879, "totalRewarded": 826700 }
 //
 // The extra fields alongside them are ignored by the current frontend (it picks
 // fields by name) and are there so the site can show price or liquidity later
@@ -14,6 +14,7 @@ const express = require('express');
 const config = require('../config');
 const { getMarketData } = require('../services/marketdata');
 const { getTokenInfo } = require('../services/holders');
+const { getRewards } = require('../services/rewards');
 
 const router = express.Router();
 
@@ -25,10 +26,11 @@ const router = express.Router();
  * explorer has an exchange rate for the token — often not at all on a young
  * chain, hence the ordering.
  */
-function buildStats({ market, token, symbol, tokenAddress }) {
+function buildStats({ market, token, rewards = {}, symbol, tokenAddress }) {
   return {
     marketCap: market.marketCap ?? token.circulatingMarketCap ?? null,
     holders: token.holders ?? null,
+    totalRewarded: rewards.totalRewarded ?? null,
     priceUsd: market.priceUsd ?? null,
     liquidityUsd: market.liquidityUsd ?? null,
     symbol,
@@ -40,11 +42,16 @@ function buildStats({ market, token, symbol, tokenAddress }) {
 router.get('/stats', async (req, res, next) => {
   try {
     // Independent upstreams — one being down must not delay or fail the other,
-    // so both settle and a rejection degrades to nulls for its own fields only.
-    const [marketResult, tokenResult] = await Promise.allSettled([getMarketData(), getTokenInfo()]);
+    // so all settle and a rejection degrades to nulls for its own fields only.
+    const [marketResult, tokenResult, rewardsResult] = await Promise.allSettled([
+      getMarketData(),
+      getTokenInfo(),
+      getRewards(),
+    ]);
 
     const market = marketResult.status === 'fulfilled' ? marketResult.value : {};
     const token = tokenResult.status === 'fulfilled' ? tokenResult.value : {};
+    const rewards = rewardsResult.status === 'fulfilled' ? rewardsResult.value : {};
 
     if (marketResult.status === 'rejected') {
       console.warn('[spacecat] market data unavailable:', marketResult.reason?.message);
@@ -52,11 +59,15 @@ router.get('/stats', async (req, res, next) => {
     if (tokenResult.status === 'rejected') {
       console.warn('[spacecat] holder count unavailable:', tokenResult.reason?.message);
     }
+    if (rewardsResult.status === 'rejected') {
+      console.warn('[spacecat] rewards unavailable:', rewardsResult.reason?.message);
+    }
 
     res.json(
       buildStats({
         market,
         token,
+        rewards,
         symbol: config.tokenSymbol,
         tokenAddress: config.tokenAddress,
       })

@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { buildStats } = require('./stats');
 
-const build = (market, token) =>
-  buildStats({ market, token, symbol: 'SPC', tokenAddress: '0xabc' });
+const build = (market, token, rewards = {}) =>
+  buildStats({ market, token, rewards, symbol: 'SPC', tokenAddress: '0xabc' });
 
 test('returns the two fields the site reads', () => {
   const out = build({ marketCap: 4_206_900 }, { holders: 6942 });
@@ -32,4 +32,14 @@ test('a dead upstream yields nulls, never zeros', () => {
 test('a real zero market cap is preserved, not treated as missing', () => {
   const out = build({ marketCap: 0 }, { circulatingMarketCap: 999 });
   assert.strictEqual(out.marketCap, 0);
+});
+
+test('includes the total SpaceX rewarded from the vault service', () => {
+  const out = build({}, {}, { totalRewarded: 826_700.5 });
+  assert.strictEqual(out.totalRewarded, 826_700.5);
+});
+
+test('a dead rewards upstream yields null, and a real zero is preserved', () => {
+  assert.strictEqual(build({}, {}).totalRewarded, null);
+  assert.strictEqual(build({}, {}, { totalRewarded: 0 }).totalRewarded, 0);
 });
