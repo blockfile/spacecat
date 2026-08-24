@@ -77,7 +77,7 @@ async function resolveVault() {
 }
 
 async function fetchRewards() {
-  if (!config.tokenAddress && !config.vaultAddress) return EMPTY; // pre-launch
+  if (!config.tokenAddress && !config.vaultAddress) return EMPTY; // pre-launch — but an explicitly configured VAULT_ADDRESS overrides this guard on purpose: setting it asserts the vault exists even if TOKEN_ADDRESS is not configured.
   const vault = await resolveVault();
   if (!vault) return EMPTY; // launched, but no vault attached (yet)
   const word = await ethCall(vault, encodeCall(SELECTOR_TOTAL_RWA_DISTRIBUTED));

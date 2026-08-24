@@ -1,6 +1,6 @@
 'use strict';
 
-// Read-only preflight. Prints the resolved config, then calls both upstreams
+// Read-only preflight. Prints the resolved config, then calls all three upstreams
 // once and shows exactly what /stats would answer. Run it on the server after
 // editing .env — it is the fastest way to tell a config mistake (wrong CA,
 // wrong chain slug) apart from a token that simply isn't listed yet.

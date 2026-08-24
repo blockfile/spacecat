@@ -7,10 +7,11 @@ const { buildStats } = require('./stats');
 const build = (market, token, rewards = {}) =>
   buildStats({ market, token, rewards, symbol: 'SPC', tokenAddress: '0xabc' });
 
-test('returns the two fields the site reads', () => {
-  const out = build({ marketCap: 4_206_900 }, { holders: 6942 });
+test('returns the three fields the site reads', () => {
+  const out = build({ marketCap: 4_206_900 }, { holders: 6942 }, { totalRewarded: 826_700 });
   assert.strictEqual(out.marketCap, 4_206_900);
   assert.strictEqual(out.holders, 6942);
+  assert.strictEqual(out.totalRewarded, 826_700);
 });
 
 test('falls back to the explorer market cap when DexScreener has none', () => {

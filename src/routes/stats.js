@@ -19,7 +19,7 @@ const { getRewards } = require('../services/rewards');
 const router = express.Router();
 
 /**
- * Pure: merge the two upstreams into the response body.
+ * Pure: merge the three upstreams into the response body.
  *
  * Market cap prefers DexScreener (live pool pricing) and falls back to
  * Blockscout's circulating_market_cap, which is populated only once the
