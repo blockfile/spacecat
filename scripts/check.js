@@ -8,6 +8,7 @@
 const config = require('../src/config');
 const { getMarketData } = require('../src/services/marketdata');
 const { getTokenInfo } = require('../src/services/holders');
+const { getRewards } = require('../src/services/rewards');
 const { buildStats } = require('../src/routes/stats');
 
 const show = (v) => (v === null || v === undefined ? '—' : v);
@@ -17,6 +18,8 @@ async function main() {
   console.log(`  token      : ${config.tokenSymbol} ${config.tokenAddress || '(TOKEN_ADDRESS not set)'}`);
   console.log(`  explorer   : ${config.explorerApi}`);
   console.log(`  dexscreener: chain "${config.dexscreenerChainId}"`);
+  console.log(`  rpc        : ${config.rpcUrl}`);
+  console.log(`  launcher   : ${config.ponsLauncher}${config.vaultAddress ? ` (vault override: ${config.vaultAddress})` : ''}`);
   console.log(`  cors       : ${config.corsOrigins.join(', ')}`);
   console.log(`  port       : ${config.port}`);
   console.log('');
@@ -27,7 +30,7 @@ async function main() {
     return;
   }
 
-  const [market, token] = await Promise.allSettled([getMarketData(), getTokenInfo()]);
+  const [market, token, rewards] = await Promise.allSettled([getMarketData(), getTokenInfo(), getRewards()]);
 
   console.log('dexscreener (market cap)');
   if (market.status === 'rejected') console.log(`  FAILED: ${market.reason.message}`);
@@ -47,12 +50,22 @@ async function main() {
   }
   console.log('');
 
+  console.log('pons rwa vault (total SpaceX rewarded)');
+  if (rewards.status === 'rejected') console.log(`  FAILED: ${rewards.reason.message}`);
+  else if (rewards.value.vaultAddress === null) console.log('  no vault found for this token yet');
+  else {
+    console.log(`  vault        : ${rewards.value.vaultAddress}`);
+    console.log(`  totalRewarded: ${show(rewards.value.totalRewarded)}`);
+  }
+  console.log('');
+
   console.log('GET /stats would answer:');
   console.log(
     JSON.stringify(
       buildStats({
         market: market.status === 'fulfilled' ? market.value : {},
         token: token.status === 'fulfilled' ? token.value : {},
+        rewards: rewards.status === 'fulfilled' ? rewards.value : {},
         symbol: config.tokenSymbol,
         tokenAddress: config.tokenAddress,
       }),
