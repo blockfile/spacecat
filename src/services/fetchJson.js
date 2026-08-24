@@ -13,15 +13,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * GET `url` and parse JSON, retrying transient failures.
  * @param {string} url
- * @param {{headers?: object, retries?: number, delayMs?: number,
+ * @param {{headers?: object, method?: string, body?: string, retries?: number, delayMs?: number,
  *          sleepFn?: (ms:number)=>Promise<void>, fetchFn?: typeof fetch}} [opts]
  */
-async function fetchJson(url, { headers, retries = 3, delayMs = 1000, sleepFn = sleep, fetchFn = fetch } = {}) {
+async function fetchJson(url, { headers, method, body, retries = 3, delayMs = 1000, sleepFn = sleep, fetchFn = fetch } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     let res;
     try {
-      res = await fetchFn(url, { headers });
+      res = await fetchFn(url, { headers, method, body });
     } catch (err) {
       lastErr = err; // network / DNS / socket error — retryable
       if (attempt === retries) throw err;
