@@ -1,0 +1,68 @@
+'use strict';
+
+// Read-only preflight. Prints the resolved config, then calls both upstreams
+// once and shows exactly what /stats would answer. Run it on the server after
+// editing .env — it is the fastest way to tell a config mistake (wrong CA,
+// wrong chain slug) apart from a token that simply isn't listed yet.
+
+const config = require('../src/config');
+const { getMarketData } = require('../src/services/marketdata');
+const { getTokenInfo } = require('../src/services/holders');
+const { buildStats } = require('../src/routes/stats');
+
+const show = (v) => (v === null || v === undefined ? '—' : v);
+
+async function main() {
+  console.log('config');
+  console.log(`  token      : ${config.tokenSymbol} ${config.tokenAddress || '(TOKEN_ADDRESS not set)'}`);
+  console.log(`  explorer   : ${config.explorerApi}`);
+  console.log(`  dexscreener: chain "${config.dexscreenerChainId}"`);
+  console.log(`  cors       : ${config.corsOrigins.join(', ')}`);
+  console.log(`  port       : ${config.port}`);
+  console.log('');
+
+  if (!config.tokenAddress) {
+    console.log('TOKEN_ADDRESS is blank — /stats will answer null for every field.');
+    console.log('That is the correct pre-launch state; the site hides the tiles.');
+    return;
+  }
+
+  const [market, token] = await Promise.allSettled([getMarketData(), getTokenInfo()]);
+
+  console.log('dexscreener (market cap)');
+  if (market.status === 'rejected') console.log(`  FAILED: ${market.reason.message}`);
+  else if (market.value.marketCap === null) console.log('  no pair found on this chain yet');
+  else {
+    console.log(`  marketCap  : ${show(market.value.marketCap)}`);
+    console.log(`  priceUsd   : ${show(market.value.priceUsd)}`);
+    console.log(`  liquidity  : ${show(market.value.liquidityUsd)}`);
+  }
+  console.log('');
+
+  console.log('blockscout (holders)');
+  if (token.status === 'rejected') console.log(`  FAILED: ${token.reason.message}`);
+  else {
+    console.log(`  holders    : ${show(token.value.holders)}`);
+    console.log(`  circMcap   : ${show(token.value.circulatingMarketCap)} (market cap fallback)`);
+  }
+  console.log('');
+
+  console.log('GET /stats would answer:');
+  console.log(
+    JSON.stringify(
+      buildStats({
+        market: market.status === 'fulfilled' ? market.value : {},
+        token: token.status === 'fulfilled' ? token.value : {},
+        symbol: config.tokenSymbol,
+        tokenAddress: config.tokenAddress,
+      }),
+      null,
+      2
+    )
+  );
+}
+
+main().catch((err) => {
+  console.error('check failed:', err);
+  process.exit(1);
+});
