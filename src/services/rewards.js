@@ -1,98 +1,54 @@
 'use strict';
 
-// Total SpaceX rewarded to holders, from the token's Pons V2 RWA vault.
+// Total SPCX rewarded to holders, from the Pons fee distributor.
 //
-// SpaceCat launches on the Pons V2 launchpad (Robinhood Chain) with a PonsVault
-// "RWA Dividend" vault: creator fees buy tokenized SpaceX stock, holders claim
-// pro rata. The vault keeps a cumulative counter — `uint256 public
-// totalRwaDistributed` — and this service reads it with two raw eth_calls (no
-// web3 dependency):
+// SPC launched on the Pons V2 launchpad paired with SPCX (tokenized SpaceX
+// stock). Its 2% creator tax accrues in SPCX and routes — with no creator
+// claim — to a per-token fee distributor contract, which pushes epoch-based
+// payouts straight to holder wallets. The cumulative "paid to holders" number
+// has no single on-chain getter (the contract is epoch-based; Pons sums it
+// server-side), so this reads the same public API the Pons token page uses:
 //
-//   1. vaultOf(token) on the vault launcher  -> the token's vault address
-//   2. totalRwaDistributed() on that vault   -> raw amount in reward-token units
+//   GET {ponsApi}/api/pons-v2-market/{token}/distributor
+//   -> { state, distributor, distributedQuote, ... }   (wei strings)
 //
+// `distributedQuote` is the SPCX total, scaled here by REWARD_DECIMALS.
 // The value is exposed as a TOKEN amount, deliberately not converted to USD.
-// Pre-launch (no token address) or no vault: null, never 0 — the site hides a
-// null tile. A malformed RPC response throws so the cache keeps serving the
-// last good value (see cache.js) and /stats degrades this field to null.
+// Pre-launch (no token address) or no distributor: null, never 0 — the site
+// hides a null tile. A zero from an active distributor is a REAL zero (no
+// payout epoch has run yet) and is preserved. A malformed response throws so
+// the cache keeps serving the last good value (see cache.js) and /stats
+// degrades this field to null.
 
 const config = require('./../config');
 const { fetchJson } = require('./fetchJson');
 const { cached } = require('./cache');
 
-// keccak-256 selectors, precomputed and validated against known selectors.
-const SELECTOR_VAULT_OF = '0x0709df45'; // vaultOf(address)
-const SELECTOR_TOTAL_RWA_DISTRIBUTED = '0x24d6e13e'; // totalRwaDistributed()
+const EMPTY = { totalRewarded: null, distributor: null };
 
-const ZERO_ADDRESS = '0x' + '0'.repeat(40);
-const WORD_RE = /^0x[0-9a-fA-F]{64}$/;
-const EMPTY = { totalRewarded: null, vaultAddress: null };
-
-/** Pure: selector + optional address argument, ABI-encoded as calldata hex. */
-function encodeCall(selector, address) {
-  if (!address) return selector;
-  return selector + address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
-}
-
-/** Pure: 32-byte ABI word -> lowercased 0x address, or null for the zero address. */
-function decodeAddress(word) {
-  if (typeof word !== 'string' || !WORD_RE.test(word)) {
-    throw new Error(`malformed eth_call result: ${String(word).slice(0, 80)}`);
+/** Pure: map the Pons distributor API payload onto {totalRewarded, distributor}. */
+function parseDistributor(data, decimals) {
+  if (!data || typeof data !== 'object') {
+    throw new Error(`malformed distributor response: ${String(data).slice(0, 80)}`);
   }
-  const addr = '0x' + word.slice(-40).toLowerCase();
-  return addr === ZERO_ADDRESS ? null : addr;
-}
-
-/** Pure: 32-byte ABI uint256 word -> token amount scaled by `decimals`. */
-function decodeAmount(word, decimals) {
-  if (typeof word !== 'string' || !WORD_RE.test(word)) {
-    throw new Error(`malformed eth_call result: ${String(word).slice(0, 80)}`);
+  if (data.distributedQuote == null) return EMPTY; // token has no distributor
+  if (typeof data.distributedQuote !== 'string' || !/^\d+$/.test(data.distributedQuote)) {
+    throw new Error(`malformed distributedQuote: ${String(data.distributedQuote).slice(0, 80)}`);
   }
-  return Number(BigInt(word)) / 10 ** decimals;
-}
-
-async function ethCall(to, data) {
-  const res = await fetchJson(config.rpcUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }),
-  });
-  if (!res || typeof res.result !== 'string') {
-    const detail = res && res.error ? JSON.stringify(res.error) : JSON.stringify(res);
-    throw new Error(`eth_call to ${to} failed: ${detail}`);
-  }
-  return res.result;
-}
-
-// The vault address never changes once launched, so remember it across cache
-// refreshes; re-resolve only while it is still unknown (pre-vault).
-let knownVault = null;
-
-async function resolveVault() {
-  if (config.vaultAddress) return config.vaultAddress;
-  if (knownVault) return knownVault;
-  const word = await ethCall(config.ponsLauncher, encodeCall(SELECTOR_VAULT_OF, config.tokenAddress));
-  knownVault = decodeAddress(word);
-  return knownVault;
+  return {
+    totalRewarded: Number(BigInt(data.distributedQuote)) / 10 ** decimals,
+    distributor: data.distributor ? String(data.distributor).toLowerCase() : null,
+  };
 }
 
 async function fetchRewards() {
-  if (!config.tokenAddress && !config.vaultAddress) return EMPTY; // pre-launch — but an explicitly configured VAULT_ADDRESS overrides this guard on purpose: setting it asserts the vault exists even if TOKEN_ADDRESS is not configured.
-  const vault = await resolveVault();
-  if (!vault) return EMPTY; // launched, but no vault attached (yet)
-  const word = await ethCall(vault, encodeCall(SELECTOR_TOTAL_RWA_DISTRIBUTED));
-  return { totalRewarded: decodeAmount(word, config.rewardDecimals), vaultAddress: vault };
+  if (!config.tokenAddress) return EMPTY; // pre-launch: nothing to ask about
+  const url = `${config.ponsApi}/api/pons-v2-market/${config.tokenAddress}/distributor`;
+  const data = await fetchJson(url, { headers: { accept: 'application/json' } });
+  return parseDistributor(data, config.rewardDecimals);
 }
 
 // Cached read. On failure the last good value keeps being served (see cache.js).
 const getRewards = cached(config.rewardsTtlMs, fetchRewards);
 
-module.exports = {
-  getRewards,
-  encodeCall,
-  decodeAddress,
-  decodeAmount,
-  EMPTY,
-  SELECTOR_VAULT_OF,
-  SELECTOR_TOTAL_RWA_DISTRIBUTED,
-};
+module.exports = { getRewards, parseDistributor, EMPTY };

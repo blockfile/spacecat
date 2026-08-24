@@ -1,7 +1,7 @@
 # spacecat-api — Design
 
 Date: 2026-08-24
-Status: approved
+Status: approved (rewards section superseded — see Addendum at the bottom)
 
 ## Purpose
 
@@ -120,3 +120,29 @@ rejections get a terse 403 and one log line per origin.
 
 New repo at `d:\projects\spacecat`, initial commit, remote
 `https://github.com/blockfile/spacecat.git`, push `main`.
+
+## Addendum (2026-08-24, post-launch): rewards source replaced
+
+SPC launched at `0xd16e7422336e75fb995eaf14ea9f8f473968105f` on Pons V2, paired
+with SPCX (tokenized SpaceX, `0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa`) —
+**without a PonsVault**. The real rewards mechanism is Pons's fee routing: the
+2% creator tax accrues in SPCX and routes, with no creator claim, to a
+per-token fee distributor (a BeaconProxy; for this launch
+`0x5AA38e88d15677781b00821fdBc2Cdbb3409Aeb2`) that pushes epoch-based payouts
+to holder wallets.
+
+The distributor contract exposes `epochCount()` / `getEpoch(i)` / merkle
+`claim(...)` but **no single cumulative counter** — Pons computes the total
+server-side. The rewards service therefore no longer does eth_calls; it reads
+the same public API the Pons token page uses:
+
+    GET {PONS_API}/api/pons-v2-market/{TOKEN_ADDRESS}/distributor
+    -> { state, distributor, distributedQuote, distributedCoin,
+         unallocatedQuote, epochCount, latestEpoch, ... }   (wei strings)
+
+`totalRewarded = distributedQuote / 10^REWARD_DECIMALS`. Config keys `RPC_URL`,
+`PONS_LAUNCHER`, `VAULT_ADDRESS` are replaced by `PONS_API` (default
+`https://www.ponsfamily.com`). Null rules unchanged, with one refinement: an
+active distributor reporting `"0"` is a REAL zero (no payout epoch has run
+yet) and is served as `0`; `null` remains reserved for "no token address" or
+"no distributor". The service returns `{ totalRewarded, distributor }`.

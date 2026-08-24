@@ -18,8 +18,7 @@ async function main() {
   console.log(`  token      : ${config.tokenSymbol} ${config.tokenAddress || '(TOKEN_ADDRESS not set)'}`);
   console.log(`  explorer   : ${config.explorerApi}`);
   console.log(`  dexscreener: chain "${config.dexscreenerChainId}"`);
-  console.log(`  rpc        : ${config.rpcUrl}`);
-  console.log(`  launcher   : ${config.ponsLauncher}${config.vaultAddress ? ` (vault override: ${config.vaultAddress})` : ''}`);
+  console.log(`  pons api   : ${config.ponsApi}`);
   console.log(`  cors       : ${config.corsOrigins.join(', ')}`);
   console.log(`  port       : ${config.port}`);
   console.log('');
@@ -50,11 +49,11 @@ async function main() {
   }
   console.log('');
 
-  console.log('pons rwa vault (total SpaceX rewarded)');
+  console.log('pons fee distributor (total SPCX rewarded)');
   if (rewards.status === 'rejected') console.log(`  FAILED: ${rewards.reason.message}`);
-  else if (rewards.value.vaultAddress === null) console.log('  no vault found for this token yet');
+  else if (rewards.value.distributor === null) console.log('  no distributor found for this token yet');
   else {
-    console.log(`  vault        : ${rewards.value.vaultAddress}`);
+    console.log(`  distributor  : ${rewards.value.distributor}`);
     console.log(`  totalRewarded: ${show(rewards.value.totalRewarded)}`);
   }
   console.log('');
