@@ -42,6 +42,19 @@ function parseCurvePrice(data) {
   return price;
 }
 
+/**
+ * Pure: combine the two legs. No curve trades (null curve price) is a REAL
+ * empty — the token simply has no price yet. But a missing SPCX/USD price is
+ * always an upstream glitch (SPCX is a major listed asset), so it THROWS:
+ * a fulfilled empty would overwrite the cached good value for a whole TTL,
+ * while a throw makes the cache keep serving it (see cache.js).
+ */
+function combinePrices(curvePrice, quoteUsd) {
+  if (curvePrice === null) return EMPTY;
+  if (quoteUsd === null) throw new Error('SPCX price unavailable from DexScreener');
+  return { priceUsd: curvePrice * quoteUsd };
+}
+
 async function fetchCurveMarket() {
   if (!config.tokenAddress || !config.rewardTokenAddress) return EMPTY;
 
@@ -52,14 +65,13 @@ async function fetchCurveMarket() {
     fetchJson(quoteUrl, { headers: { accept: 'application/json' } }),
   ]);
 
-  const curvePrice = parseCurvePrice(chart);
-  const quoteUsd = parsePairs(quote, config.rewardTokenAddress, config.dexscreenerChainId).priceUsd;
-  if (curvePrice === null || quoteUsd === null) return EMPTY;
-
-  return { priceUsd: curvePrice * quoteUsd };
+  return combinePrices(
+    parseCurvePrice(chart),
+    parsePairs(quote, config.rewardTokenAddress, config.dexscreenerChainId).priceUsd
+  );
 }
 
 // Cached read. On failure the last good value keeps being served (see cache.js).
 const getCurveMarket = cached(config.marketTtlMs, fetchCurveMarket);
 
-module.exports = { getCurveMarket, parseCurvePrice, EMPTY };
+module.exports = { getCurveMarket, parseCurvePrice, combinePrices, EMPTY };
