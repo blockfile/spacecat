@@ -9,6 +9,7 @@ const config = require('../src/config');
 const { getMarketData } = require('../src/services/marketdata');
 const { getTokenInfo } = require('../src/services/holders');
 const { getRewards } = require('../src/services/rewards');
+const { getCurveMarket } = require('../src/services/curvemarket');
 const { buildStats } = require('../src/routes/stats');
 
 const show = (v) => (v === null || v === undefined ? '—' : v);
@@ -29,7 +30,12 @@ async function main() {
     return;
   }
 
-  const [market, token, rewards] = await Promise.allSettled([getMarketData(), getTokenInfo(), getRewards()]);
+  const [market, token, rewards, curve] = await Promise.allSettled([
+    getMarketData(),
+    getTokenInfo(),
+    getRewards(),
+    getCurveMarket(),
+  ]);
 
   console.log('dexscreener (market cap)');
   if (market.status === 'rejected') console.log(`  FAILED: ${market.reason.message}`);
@@ -49,6 +55,12 @@ async function main() {
   }
   console.log('');
 
+  console.log('pons curve (pre-graduation price, via SPCX/USD)');
+  if (curve.status === 'rejected') console.log(`  FAILED: ${curve.reason.message}`);
+  else if (curve.value.priceUsd === null) console.log('  no curve price (no trades, or SPCX unlisted)');
+  else console.log(`  priceUsd   : ${curve.value.priceUsd}`);
+  console.log('');
+
   console.log('pons fee distributor (total SPCX rewarded)');
   if (rewards.status === 'rejected') console.log(`  FAILED: ${rewards.reason.message}`);
   else if (rewards.value.distributor === null) console.log('  no distributor found for this token yet');
@@ -65,6 +77,7 @@ async function main() {
         market: market.status === 'fulfilled' ? market.value : {},
         token: token.status === 'fulfilled' ? token.value : {},
         rewards: rewards.status === 'fulfilled' ? rewards.value : {},
+        curve: curve.status === 'fulfilled' ? curve.value : {},
         symbol: config.tokenSymbol,
         tokenAddress: config.tokenAddress,
       }),

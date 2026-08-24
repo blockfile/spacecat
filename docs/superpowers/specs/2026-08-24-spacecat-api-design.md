@@ -146,3 +146,16 @@ the same public API the Pons token page uses:
 active distributor reporting `"0"` is a REAL zero (no payout epoch has run
 yet) and is served as `0`; `null` remains reserved for "no token address" or
 "no distributor". The service returns `{ totalRewarded, distributor }`.
+
+### Addendum 2 (2026-08-24): pre-graduation market cap from the bonding curve
+
+DexScreener cannot price SPC until it graduates off the Pons V2 bonding curve,
+so `src/services/curvemarket.js` computes a fallback: the Pons chart API
+(`/api/pons-v2-market/{token}/chart?range=1d`) gives the latest curve price in
+SPCX, and SPCX itself (`REWARD_TOKEN_ADDRESS`, tokenized SpaceX) is already
+listed on DexScreener with deep USDG pools, giving the USD conversion.
+`priceUsd = curvePrice × SPCX_USD`; `marketCap = priceUsd × totalSupply`
+(supply and decimals from the existing Blockscout token info). Merge order in
+`/stats`: DexScreener pair → explorer circulating mcap → curve computation →
+null, so the DexScreener pair takes over automatically at graduation. The
+`priceUsd` field falls back to the curve price the same way.

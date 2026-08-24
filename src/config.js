@@ -35,6 +35,9 @@ const config = {
   // cumulative "paid to holders" total comes from Pons's public API — the same
   // source their token page renders (see src/services/rewards.js).
   ponsApi: (process.env.PONS_API || 'https://www.ponsfamily.com').replace(/\/$/, ''),
+  // SPCX (tokenized SpaceX) — the curve's quote asset and the reward asset.
+  // Its DexScreener USD price converts the bonding-curve price to USD.
+  rewardTokenAddress: lowerOrNull(process.env.REWARD_TOKEN_ADDRESS) || '0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea',
   // Decimals of the SPCX reward asset.
   rewardDecimals: num(process.env.REWARD_DECIMALS, 18),
   rewardsTtlMs: num(process.env.REWARDS_TTL_MS, 60_000),
