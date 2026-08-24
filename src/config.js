@@ -29,6 +29,20 @@ const config = {
   marketTtlMs: num(process.env.MARKET_TTL_MS, 30_000),
   holdersTtlMs: num(process.env.HOLDERS_TTL_MS, 120_000),
 
+  // ── Pons V2 rewards ("Total SpaceX Rewarded") ──────────────────────────────
+  // SpaceCat launches on the Pons V2 launchpad with an RWA-dividend vault:
+  // creator fees buy tokenized SpaceX which holders claim pro rata. The vault's
+  // cumulative counter is read with raw eth_calls over this JSON-RPC endpoint —
+  // Blockscout proxies the chain's RPC, so the default needs no extra setup.
+  rpcUrl: (process.env.RPC_URL || `${explorerApi}/api/eth-rpc`).replace(/\/$/, ''),
+  // The Pons vault launcher; vaultOf(token) resolves the token's vault.
+  ponsLauncher: lowerOrNull(process.env.PONS_LAUNCHER) || '0xd948edcdb832529bb3458b0463f5e02bb448888e',
+  // Optional: the vault address directly — skips the vaultOf lookup.
+  vaultAddress: lowerOrNull(process.env.VAULT_ADDRESS),
+  // Decimals of the tokenized-SpaceX reward asset.
+  rewardDecimals: num(process.env.REWARD_DECIMALS, 18),
+  rewardsTtlMs: num(process.env.REWARDS_TTL_MS, 60_000),
+
   // Comma-separated allowlist of browser origins. Non-browser requests (no
   // Origin header) always pass; "*" allows any origin.
   corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000')
